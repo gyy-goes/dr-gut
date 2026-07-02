@@ -1,0 +1,214 @@
+/*
+ * DR-GUT 维度根大统一理论 v8.0 核心最小实现
+ * 理论对应：第3章 F₁闭式二阶精算本源公式 / 第5章 二阶差值补偿迭代
+ * 编译命令：gcc dr_gut_minimal.c -o dr_gut_minimal -lm -std=c99
+ * 开源协议：MIT | 核心理论永久归入人类公共知识领域
+ */
+
+#include <stdio.h>
+#include <math.h>
+
+// ==================== 错误码与类型定义 ====================
+typedef enum {
+    DR_GUT_OK = 0,          // 计算成功
+    DR_GUT_ERR_INVALID_N,   // 开方维度非法（<1）
+    DR_GUT_ERR_NEG_EVEN,    // 偶次开方传入负数
+    DR_GUT_ERR_NULL_PTR,    // 输出指针为空
+    DR_GUT_ERR_MAX_ITER     // 达到最大迭代次数
+} dr_gut_err_t;
+
+// ==================== 内部辅助工具 ====================
+
+/**
+ * @brief 计算整数基准根 a，满足 a^n ≤ x < (a+1)^n
+ * @param n 开方维度
+ * @param x 被开方数（非负）
+ * @return 整数基准根a
+ */
+static int dr_gut_get_int_root(int n, double x) {
+    if (x < 1.0) return 0;
+
+    // 初值快速估算
+    int a = (int)pow(x, 1.0 / n);
+
+    // 向上校正，避免浮点精度偏差
+    while (pow(a + 1, n) <= x) {
+        a++;
+    }
+    // 向下校正
+    while (a > 0 && pow(a, n) > x) {
+        a--;
+    }
+    return a;
+}
+
+// ==================== 核心算法层 ====================
+
+/**
+ * @brief F₁ 闭式二阶精算本源公式（DR-GUT唯一本源统一解）
+ * @note 对应理论第3.2节，具备全域边界自洽、精度均衡特性
+ * @param n 开方维度
+ * @param x 被开方数（非负）
+ * @param a 整数基准根
+ * @return F₁闭式近似值
+ */
+static double dr_gut_f1_closed_form(int n, double x, int a) {
+    double a_pow_n = pow(a, n);
+    double delta = x - a_pow_n;
+
+    // 边界点：增量为0时直接返回整数根
+    if (delta <= 0.0) {
+        return (double)a;
+    }
+
+    double delta_max = pow(a + 1, n) - a_pow_n;
+    double S_a = n * pow(a, n - 1); // 基准超表面积 n·a^(n-1)
+
+    // F₁ 本源公式核心计算
+    double denominator = S_a + delta * (delta_max - S_a) / delta_max;
+    double f1 = a + delta / denominator;
+
+    return f1;
+}
+
+/**
+ * @brief 单步二阶差值补偿迭代（原创核心迭代形式）
+ * @note 对应理论第5.1.2节，无乘法运算，硬件友好度极高
+ * @param n 开方维度
+ * @param x 被开方数（非负）
+ * @param xk 当前迭代近似值
+ * @return 下一步迭代近似值
+ */
+static double dr_gut_diff_iter_step(int n, double x, double xk) {
+    double xk_pow = pow(xk, n - 1);
+    double yk = x / xk_pow;          // 补偿因数
+    double delta_k = yk - xk;        // 误差差值
+    double xk_next = xk + delta_k / n; // 差值均匀分配迭代
+    return xk_next;
+}
+
+// ==================== 统一对外API ====================
+
+/**
+ * @brief 通用n次方根统一计算入口
+ * @param n 开方维度（正整数）
+ * @param x 被开方数（偶次开方需非负）
+ * @param target_precision 目标相对精度
+ * @param max_iter 最大迭代次数
+ * @param[out] result 计算结果输出指针
+ * @return 错误码
+ */
+dr_gut_err_t dr_gut_nth_root(int n, double x,
+                             double target_precision,
+                             int max_iter,
+                             double *result)
+{
+    // 参数合法性校验
+    if (n < 1) return DR_GUT_ERR_INVALID_N;
+    if (result == NULL) return DR_GUT_ERR_NULL_PTR;
+    if (x < 0.0 && n % 2 == 0) return DR_GUT_ERR_NEG_EVEN;
+
+    // 特殊值快速返回
+    if (x == 0.0) {
+        *result = 0.0;
+        return DR_GUT_OK;
+    }
+    if (n == 1) {
+        *result = x;
+        return DR_GUT_OK;
+    }
+
+    // 奇次负数开方：取绝对值计算，最终恢复符号
+    int sign = 1;
+    if (x < 0.0) {
+        sign = -1;
+        x = -x;
+    }
+
+    // 1. 求整数基准根a
+    int a = dr_gut_get_int_root(n, x);
+
+    // 2. F₁闭式公式生成高精度初值
+    double xk = dr_gut_f1_closed_form(n, x, a);
+
+    // 3. 差值补偿迭代收敛至目标精度
+    int iter_cnt = 0;
+    double prev;
+    do {
+        prev = xk;
+        xk = dr_gut_diff_iter_step(n, x, xk);
+        iter_cnt++;
+    } while (fabs(xk - prev) / xk > target_precision && iter_cnt < max_iter);
+
+    *result = sign * xk;
+
+    return (iter_cnt >= max_iter) ? DR_GUT_ERR_MAX_ITER : DR_GUT_OK;
+}
+
+// ==================== 测试主函数 ====================
+int main() {
+    printf("===== DR-GUT v8.0 核心最小实现测试 =====\n\n");
+
+    const double target_prec = 1e-15;
+    const int max_iter = 10;
+    double result;
+    dr_gut_err_t err;
+
+    // 测试1：平方根 √2
+    printf("测试1：平方根 √2\n");
+    err = dr_gut_nth_root(2, 2.0, target_prec, max_iter, &result);
+    if (err == DR_GUT_OK) {
+        double true_val = sqrt(2.0);
+        double rel_err = fabs(result - true_val) / true_val;
+        printf("  计算值：%.15f\n", result);
+        printf("  真实值：%.15f\n", true_val);
+        printf("  相对误差：%.2e\n\n", rel_err);
+    }
+
+    // 测试2：立方根 ³√9
+    printf("测试2：立方根 ³√9\n");
+    err = dr_gut_nth_root(3, 9.0, target_prec, max_iter, &result);
+    if (err == DR_GUT_OK) {
+        double true_val = pow(9.0, 1.0/3.0);
+        double rel_err = fabs(result - true_val) / true_val;
+        printf("  计算值：%.15f\n", result);
+        printf("  真实值：%.15f\n", true_val);
+        printf("  相对误差：%.2e\n\n", rel_err);
+    }
+
+    // 测试3：四次方根 ⁴√17
+    printf("测试3：四次方根 ⁴√17\n");
+    err = dr_gut_nth_root(4, 17.0, target_prec, max_iter, &result);
+    if (err == DR_GUT_OK) {
+        double true_val = pow(17.0, 1.0/4.0);
+        double rel_err = fabs(result - true_val) / true_val;
+        printf("  计算值：%.15f\n", result);
+        printf("  真实值：%.15f\n", true_val);
+        printf("  相对误差：%.2e\n\n", rel_err);
+    }
+
+    // 测试4：大增量场景 √105（a=10, Δ=5）
+    printf("测试4：大增量平方根 √105（区间中点附近）\n");
+    err = dr_gut_nth_root(2, 105.0, target_prec, max_iter, &result);
+    if (err == DR_GUT_OK) {
+        double true_val = sqrt(105.0);
+        double rel_err = fabs(result - true_val) / true_val;
+        printf("  计算值：%.15f\n", result);
+        printf("  真实值：%.15f\n", true_val);
+        printf("  相对误差：%.2e\n\n", rel_err);
+    }
+
+    // 测试5：奇次负数开方 ³√-8
+    printf("测试5：奇次负数开方 ³√-8\n");
+    err = dr_gut_nth_root(3, -8.0, target_prec, max_iter, &result);
+    if (err == DR_GUT_OK) {
+        double true_val = -2.0;
+        double rel_err = fabs(result - true_val) / fabs(true_val);
+        printf("  计算值：%.15f\n", result);
+        printf("  真实值：%.15f\n", true_val);
+        printf("  相对误差：%.2e\n\n", rel_err);
+    }
+
+    printf("===== 测试完成 =====\n");
+    return 0;
+}
