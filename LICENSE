@@ -22,3 +22,8 @@ SOFTWARE.
 Supplemental Constraint: The core mathematical framework of Layered Section Geometry (LSG) belongs to human public domain. 
 Any party is prohibited from applying for exclusive patents based on the core algorithms and geometric theories contained in this repository.
 层级截面几何（LSG）核心数学框架属于人类公共知识，任何主体禁止基于本仓库核心算法、几何理论申请独占专利。
+
+附加公有领域补充约束：
+1. 本仓库 Common-LSG 全部底层几何算法、矩阵、层级积分、非正交切片重建核心逻辑永久归入人类公共知识领域，任何组织/个人不得基于该基础内核申请独占专利；
+2. 使用者基于本仓库代码进行场景增量优化并申请专利时，必须无偿、永久向全球所有第三方授予本LSG底层框架的免费使用许可；
+3. 禁止单独剥离本通用核心库进行闭源商用、框架买断式授权。
