@@ -1,0 +1,20 @@
+# ---------- 可选：Aerospace-Space 航空航天模块 ----------
+gdal>=3.0.0
+
+# ---------- 可选：Industrial-3DInspect 工业检测模块 ----------
+pydicom>=2.3.0
+
+# ---------- 可选：Architecture-BIM 建筑BIM模块 ----------
+laspy>=2.4.0
+
+# ---------- 可选：Robot-Vision 机器人视觉模块 ----------
+opencv-python>=4.5.0
+
+# ---------- 可选：Energy-OilGeo 油气勘探模块 ----------
+segyio>=1.9.0
+
+# ---------- 可选：Traffic-SmartRoad 智慧道路模块 ----------
+open3d>=0.15.0
+
+# ---------- 可选：Bio-Microscope 生物显微模块 ----------
+tifffile>=2021.7.2
